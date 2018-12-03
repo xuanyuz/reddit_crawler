@@ -9,7 +9,7 @@ import scrapy
 
 class CrawlerItem(scrapy.Item):
     title = scrapy.Field(serializer = str)
-    _id = scrapy.Field(serializer = str)
+    _id = scrapy.Field()
     author = scrapy.Field(serializer = str)
     author_id = scrapy.Field(serializer = str)
     subreddit = scrapy.Field(serializer = str)
@@ -26,12 +26,12 @@ class CrawlerItem(scrapy.Item):
     type = scrapy.Field(serializer = str)
 
 class CommentItem(scrapy.Item):
-    _id = scrapy.Field(serializer = str)
+    _id = scrapy.Field()
+    picture_id = scrapy.Field(serializer=str)
     author = scrapy.Field(serializer = str)
     author_id = scrapy.Field(serializer = str)
     timestamp = scrapy.Field(serializer = str)
     href = scrapy.Field(serializer = str)
-    comment_id = scrapy.Field(serializer = str)
     parent_id = scrapy.Field(serializer = str)
     child_id = scrapy.Field(serializer = str)
     reply = scrapy.Field(serializer = int)

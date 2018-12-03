@@ -104,10 +104,10 @@ class MySpider(CrawlSpider):
     def analysis_comment(self, picture_id, href, parent_id, comments):
         for comment_info in comments:
             comment = dict()
-            comment['_id'] = picture_id
+            comment['picture_id'] = picture_id
             comment['href'] = href
             comment['parent_id'] = parent_id
-            comment['comment_id'] = comment_info.xpath('@data-fullname').extract_first()
+            comment['_id'] = comment_info.xpath('@data-fullname').extract_first()
             comment['author'] = comment_info.xpath('@data-author').extract_first()
             comment['author_id'] = comment_info.xpath('@data-author-fullname').extract_first()
             comment['timestamp'] = comment_info.xpath(
@@ -130,12 +130,12 @@ class MySpider(CrawlSpider):
                 comment['likes'] = int(comment['likes'])
 
             comments_selector = comment_info.xpath(
-                'div[@class="child"]/div[@id="' + "siteTable_" + comment['comment_id'] + '"]/div[re:match(@class," ?thing id-.*")]')
+                'div[@class="child"]/div[@id="' + "siteTable_" + comment['_id'] + '"]/div[re:match(@class," ?thing id-.*")]')
 
-            if comment['comment_id']:
+            if comment['_id']:
                 if comments_selector:
                     i = 0
-                    get_comments = self.analysis_comment(picture_id, href, comment['comment_id'], comments_selector)
+                    get_comments = self.analysis_comment(picture_id, href, comment['_id'], comments_selector)
                     while i < len(comments_selector):
                         comment_item, num = get_comments.next()
                         if num == 0:
