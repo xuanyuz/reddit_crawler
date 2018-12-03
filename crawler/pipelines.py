@@ -33,10 +33,12 @@ class CrawlerPipeline(object):
     def __init__(self):
         client = pymongo.MongoClient('mongodb://localhost:27017/')
         db = client.reddit
-        self.collection = db.info
-
+        self.picture_storage = db.picture_storage
+        self.comments = db.comments
+        
     def process_item(self, item, spider):
-        print(item)
-        id = self.collection.insert(dict(item))
-        print id
+        if isinstance(item, CrawlerItem):
+            id = self.picture_storage.insert(dict(item))
+        elif isinstance(item, CommentItem):
+            id = self.comments.insert(dict(item))
 '''

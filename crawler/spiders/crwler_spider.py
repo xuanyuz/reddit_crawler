@@ -51,10 +51,10 @@ class MySpider(CrawlSpider):
 
         if valid_link:
             comments = response.xpath(
-                '//div[@id="' + "siteTable_" + response.meta["info"]["id"] + '"]/div[re:match(@class," ?thing id-.*")]')
+                '//div[@id="' + "siteTable_" + response.meta["info"]["_id"] + '"]/div[re:match(@class," ?thing id-.*")]')
             if comments:
-                get_comments = self.analysis_comment(response.meta["info"]['id'], response.meta["info"]['href'],
-                                                     response.meta["info"]["id"], comments)
+                get_comments = self.analysis_comment(response.meta["info"]['_id'], response.meta["info"]['href'],
+                                                     response.meta["info"]["_id"], comments)
                 i = 0
                 while i < len(comments):
                     comment_item, num = get_comments.next()
@@ -68,7 +68,7 @@ class MySpider(CrawlSpider):
         picture = dict()
         picture["title"] = list.xpath(
             'div[@class="entry unvoted"]/div[@class="top-matter"]/p[@class="title"]/a/text()').extract_first()
-        picture["id"] = list.xpath('@data-fullname').extract_first()
+        picture["_id"] = list.xpath('@data-fullname').extract_first()
         picture["author"] = list.xpath('@data-author').extract_first()
         picture["author_id"] = list.xpath('@data-author-fullname').extract_first()
         picture["subreddit"] = list.xpath('@data-subreddit').extract_first()
@@ -104,10 +104,10 @@ class MySpider(CrawlSpider):
     def analysis_comment(self, picture_id, href, parent_id, comments):
         for comment_info in comments:
             comment = dict()
-            comment['id'] = picture_id
+            comment['_id'] = picture_id
             comment['href'] = href
-            comment['parent_id'] = parent_id.split('_')[-1]
-            comment['comment_id'] = comment_info.xpath('p[@class="parent"]/a/@name').extract_first()
+            comment['parent_id'] = parent_id
+            comment['comment_id'] = comment_info.xpath('@data-fullname').extract_first()
             comment['author'] = comment_info.xpath('@data-author').extract_first()
             comment['author_id'] = comment_info.xpath('@data-author-fullname').extract_first()
             comment['timestamp'] = comment_info.xpath(
@@ -129,22 +129,18 @@ class MySpider(CrawlSpider):
             else:
                 comment['likes'] = int(comment['likes'])
 
-
-            fullname = comment_info.xpath('@data-fullname').extract_first()
             comments_selector = comment_info.xpath(
-                'div[@class="child"]/div[@id="' + "siteTable_" + fullname + '"]/div[re:match(@class," ?thing id-.*")]')
+                'div[@class="child"]/div[@id="' + "siteTable_" + comment['comment_id'] + '"]/div[re:match(@class," ?thing id-.*")]')
 
             if comment['comment_id']:
                 if comments_selector:
                     i = 0
-                    get_comments = self.analysis_comment(picture_id, href, fullname, comments_selector)
+                    get_comments = self.analysis_comment(picture_id, href, comment['comment_id'], comments_selector)
                     while i < len(comments_selector):
                         comment_item, num = get_comments.next()
                         if num == 0:
                             i = i + 1
                         yield comment_item, 1
-                else:
-                    logging.info(comment['text'])
                 yield CommentItem(comment), 0
             else:
                 yield None, 0
