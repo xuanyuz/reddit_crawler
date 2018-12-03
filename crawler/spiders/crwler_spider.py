@@ -1,5 +1,6 @@
 import scrapy
 from scrapy.contrib.spiders import CrawlSpider, Rule
+import logging
 from scrapy.contrib.linkextractors import LinkExtractor
 import re
 from crawler.items import CrawlerItem,CommentItem
@@ -10,7 +11,7 @@ class MySpider(CrawlSpider):
     start_urls = ['https://old.reddit.com/r/all/']
 
     rules = (
-        Rule(LinkExtractor(allow=('https://old.reddit\.com/(r/.*/)?\?count=.*&after=.*',)), callback='parse_list', follow=True),
+        #Rule(LinkExtractor(allow=('https://old.reddit\.com/(r/.*/)?\?count=.*&after=.*',)), callback='parse_list', follow=True),
     )
 
     picture_type = re.compile(r'.*\.jpg$|.*\.png$|.*\.gifv$|.*\.jpeg$')
@@ -34,39 +35,33 @@ class MySpider(CrawlSpider):
 
     def parse_comment(self, response):
         picture_href = response.xpath('//div[re:match(@class,"media-preview-content.*")]/a/@href').extract_first()
+        global valid_link
         if picture_href != None:
             response.meta['info']["url"] = picture_href
             response.meta['info']["type"] = picture_href.split(".")[-1]
-            comments = response.xpath(
-                '//div[@id="' + "siteTable_" + response.meta["info"]["id"] + '"]/div[re:match(@class," ?thing id-.*")]')
-            if comments:
-                parent = comments.xpath('@id').extract_first()
-                parent_id = parent.split('_')[-1]
-                get_comments = self.analysis_comment(response.meta["info"]['id'], response.meta["info"]['href'], parent_id, comments)
-                i = 0
-                while i < len(comments):
-                    comment_item, num = get_comments.next()
-                    i = i + 1
-                    i = i - num
-                    yield comment_item
+            valid_link = True
             yield CrawlerItem(response.meta['info'])
         elif self.picture_type.match(response.meta['info']["url"]):
             response.meta['info']["type"] = response.meta['info']["url"].split(".")[-1]
+            valid_link = True
+            yield CrawlerItem(response.meta['info'])
+        else:
+            valid_link = False
+            print response.url, " is not picture. data-url is ", response.meta['info']["url"]
+
+        if valid_link:
             comments = response.xpath(
                 '//div[@id="' + "siteTable_" + response.meta["info"]["id"] + '"]/div[re:match(@class," ?thing id-.*")]')
             if comments:
-                parent = comments.xpath('@id').extract_first()
-                parent_id = parent.split('_')[-1]
-                get_comments = self.analysis_comment(response.meta["info"]['id'], response.meta["info"]['href'], parent_id, comments)
+                get_comments = self.analysis_comment(response.meta["info"]['id'], response.meta["info"]['href'],
+                                                     response.meta["info"]["id"], comments)
                 i = 0
                 while i < len(comments):
                     comment_item, num = get_comments.next()
-                    i = i + 1
-                    i = i - num
-                    yield comment_item
-            yield CrawlerItem(response.meta['info'])
-        else:
-            print response.url, " is not picture. data-url is ", response.meta['info']["url"]
+                    if num == 0:
+                        i = i + 1
+                    if comment_item:
+                        yield comment_item
 
     def analysis_list(self, list):
         err = None
@@ -84,7 +79,7 @@ class MySpider(CrawlSpider):
         picture["href"] = list.xpath('@data-permalink').extract_first()
         picture["domain"] = list.xpath('@data-domain').extract_first()
         picture["rank"] = list.xpath('@data-rank').extract_first()
-        if picture["rank"] is None:
+        if picture["rank"] is None or picture["rank"] == '':
             picture["rank"] = 0
         else:
             picture["rank"] = int(picture["rank"])
@@ -111,14 +106,17 @@ class MySpider(CrawlSpider):
             comment = dict()
             comment['id'] = picture_id
             comment['href'] = href
-            comment['parent_id'] = parent_id
+            comment['parent_id'] = parent_id.split('_')[-1]
             comment['comment_id'] = comment_info.xpath('p[@class="parent"]/a/@name').extract_first()
             comment['author'] = comment_info.xpath('@data-author').extract_first()
             comment['author_id'] = comment_info.xpath('@data-author-fullname').extract_first()
             comment['timestamp'] = comment_info.xpath(
                 'div[@class="entry unvoted"]/p[@class="tagline"]/time/@datetime').extract_first()
-            comment['text'] = comment_info.xpath(
-                'div[@class="entry unvoted"]/form[@class="usertext warn-on-unload"]/div/div[@class="md"]/p/text()').extract_first()
+            text = comment_info.xpath(
+                'div[@class="entry unvoted"]/form[@class="usertext warn-on-unload"]/div/div[@class="md"]/p/text()').extract()
+            comment['text'] = ""
+            for section in text:
+                comment['text'] = comment['text'] + section + "\n"
             comment['reply'] = comment_info.xpath('@data-replies').extract_first()
             if comment['reply'] is None:
                 comment['reply'] = 0
@@ -130,18 +128,26 @@ class MySpider(CrawlSpider):
                 comment['likes'] = 0
             else:
                 comment['likes'] = int(comment['likes'])
+
+
+            fullname = comment_info.xpath('@data-fullname').extract_first()
             comments_selector = comment_info.xpath(
-                'div[@class="child"]/div[@id="' + "siteTable_" + parent_id + '"]/div[re:match(@class," ?thing id-.*")]')
-            if comments_selector:
-                parent = comments_selector.xpath('@id').extract_first()
-                parent_id = parent.split('_')[-1]
-                get_comments = self.parse_comments(picture_id, href, parent_id, comments_selector)
-                i = 0
-                while i < len(comments_selector):
-                    comment_item, num = get_comments.next()
-                    i = i + 1
-                    i = i - num
-                    yield comment_item, 1
-            yield CommentItem(comment), 0
+                'div[@class="child"]/div[@id="' + "siteTable_" + fullname + '"]/div[re:match(@class," ?thing id-.*")]')
+
+            if comment['comment_id']:
+                if comments_selector:
+                    i = 0
+                    get_comments = self.analysis_comment(picture_id, href, fullname, comments_selector)
+                    while i < len(comments_selector):
+                        comment_item, num = get_comments.next()
+                        if num == 0:
+                            i = i + 1
+                        yield comment_item, 1
+                else:
+                    logging.info(comment['text'])
+                yield CommentItem(comment), 0
+            else:
+                yield None, 0
+
 
 
